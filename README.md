@@ -11,6 +11,8 @@
 ![Platform: Kubernetes](https://img.shields.io/badge/Platform-Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)
 ![Automation: Python](https://img.shields.io/badge/Automation-Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 
+[![Repository checks](https://github.com/houssam-ops/pipeguard-devsecops-lab/actions/workflows/repository-checks.yml/badge.svg)](https://github.com/houssam-ops/pipeguard-devsecops-lab/actions/workflows/repository-checks.yml)
+
 [Architecture](#architecture) · [Security workflow](#security-workflow) · [Results](#results-and-evidence) · [Get started](#get-started) · [Roadmap](#roadmap)
 
 </div>
@@ -38,49 +40,41 @@ Developed as an academic end-of-year cybersecurity project (PFA), the lab brings
 A single virtualization host runs three functional VMs: delivery services, Kubernetes workloads and SOC services. This is a laboratory topology with no high-availability claim. The diagram intentionally omits original network addresses, hostnames and organization details.
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph DELIVERY[Delivery VM]
-    G[GitLab CE and Runner] --> S[Semgrep / Trivy / Checkov]
-    S --> B[Container build and Syft SBOM]
-    B --> R[Container Registry]
-    B -. signing design .-> C[Cosign]
+    G[GitLab CI / Semgrep / Trivy / Checkov]
+    B[Container build / Syft SBOM / Registry]
+    G --> B
   end
 
   subgraph PLATFORM[Kubernetes VM]
-    A[Argo CD] --> K[K3s / OWASP Juice Shop]
-    Y[Kyverno / Pod Security] --> K
-    V[Vault] --> K
-    K --> F[Falco runtime telemetry]
-    R --> K
-    C -. admission verification pending .-> Y
+    A[Argo CD / K3s / Juice Shop]
+    Y[Kyverno / Pod Security / Vault]
+    Y --> A
   end
-
-  G --> A
 
   subgraph SOC[SOC VM]
     W[Wazuh / indexer and dashboards]
-    Q[SOAR-lite / Flask]
-    W -->|integration webhook| Q
-    Q --> E[Correlation and risk score]
-    E --> H[Restricted host IP blocking]
-    E --> D[Dashboard / compliance / KPI]
+    Q[SOAR-lite: IP correlation and risk scoring]
+    W --> Q
   end
 
-  F --> W
-  N[Suricata network telemetry] --> W
-  O[Host and audit events] --> W
-  V -->|integration secrets| Q
-  E --> T[Slack alerts / GitLab issues]
-  E -. partial CTI evidence .-> I[AbuseIPDB]
-  E -. separate containment experiment .-> P[Kubernetes NetworkPolicy]
-  P --> K
+  B --> A
+  A -->|Falco runtime telemetry| W
+  O[Host / audit / Suricata events] --> W
+  B -. Cosign and verified admission: incomplete .-> Y
+  Q --> H[Restricted host IP blocking]
+  Q --> T[Slack alerts / GitLab issues]
+  Q --> D[Dashboard / compliance / KPI]
+  Q -. partial integration .-> I[AbuseIPDB CTI]
+  Q -. separate experiment .-> P[NetworkPolicy containment]
 
   classDef delivery fill:#dbeafe,stroke:#2563eb,color:#172554
   classDef platform fill:#dcfce7,stroke:#16a34a,color:#14532d
   classDef soc fill:#ede9fe,stroke:#7c3aed,color:#2e1065
-  class G,S,B,R,C delivery
-  class A,K,Y,V,F,P platform
-  class W,Q,E,H,D,T,I soc
+  class G,B delivery
+  class A,Y,P platform
+  class W,Q,H,D,T,I soc
 ```
 
 Solid connections summarize the documented design and lab integrations, not independently reproduced deployment evidence. Dashed connections identify qualified or incomplete paths. GitHub hosts this portfolio; **GitLab was the lab's CI/CD and incident-ticket platform**.
