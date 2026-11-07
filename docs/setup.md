@@ -11,9 +11,9 @@ python3 -m unittest discover -s tests -v
 
 The helper in `metrics/compute_kpi.py` needs only the Python standard library. No package installation, Kubernetes credentials or cloud account is required for these checks.
 
-## Lab reconstruction sequence
+## Internship environment reconstruction
 
-This is a reconstruction checklist, not an executable full installer. The exact versions used for the lab are unavailable. Recover versions, image digests, dependency locks and configuration before claiming reproducibility.
+This is a reconstruction checklist, not an executable full installer. The exact versions used for the environment are unavailable. Recover versions, image digests, dependency locks and configuration before claiming reproducibility.
 
 1. Prepare three isolated Linux VMs with private administration access. The guide proposes a 16 GB host and 2/4/4 GB VM memory allocation; load-test and resize for the selected software versions.
 2. Review the hardening excerpt on a disposable host. Confirm a working non-root SSH session before disabling root access. Recover the missing inventory and complete playbooks.

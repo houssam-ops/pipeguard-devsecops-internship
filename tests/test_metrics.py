@@ -1,4 +1,4 @@
-"""Synthetic fixtures for the recovered helper; not lab measurements."""
+"""Synthetic fixtures for the recovered helper; not environment measurements."""
 import unittest
 from metrics.compute_kpi import compute_mttd_mttr
 

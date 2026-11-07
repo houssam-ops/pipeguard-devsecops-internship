@@ -4,13 +4,13 @@ This runbook describes future validation after final source recovery. It is not 
 
 ## Preparation
 
-Use an isolated, authorized lab. Record the commit, component versions, image digests, network-policy implementation and active allow rules. Synchronize clocks. Keep raw events and captures outside this repository until separately sanitized.
+Use an isolated, authorized environment. Record the commit, component versions, image digests, network-policy implementation and active allow rules. Synchronize clocks. Keep raw events and captures outside this repository until separately sanitized.
 
 Recover the actual `/webhook/alert` schema from final source before generating payloads; do not substitute the guide's `/falco-webhook` interface.
 
 ## Scenario 1: low-risk alert
 
-Submit a schema-valid synthetic event with a controlled lab identity. Capture the received event, score, correlation key and decision. Verify that low-risk activity does not trigger blocking. Confirm that the same input and configuration yield the expected score.
+Submit a schema-valid synthetic event with a controlled environment identity. Capture the received event, score, correlation key and decision. Verify that low-risk activity does not trigger blocking. Confirm that the same input and configuration yield the expected score.
 
 ## Scenario 2: repeated critical activity
 

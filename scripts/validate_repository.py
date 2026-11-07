@@ -1,15 +1,19 @@
 """Publication guard for tracked files; supplements manual review and Gitleaks.
 
-New portfolio tooling, not part of the original lab implementation.
+New portfolio tooling, not part of the original environment implementation.
 Only reports filenames/reasons, never the content of a possible credential.
 """
 from pathlib import Path
 import ast
+import hashlib
 import re
 import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+APPROVED_SCREENSHOTS = {'assets/screenshots/gitlab-security-pipeline.png': 'f80f1cd986b8a360075cd5567b1854e2a4bb554876d79ad3f35c200a2aa360ad',
+ 'assets/screenshots/wazuh-security-overview.png': '49914628fd0ee6074f16f7128a3fa6ee021923ca90c83d3af53ab8695fb3cf2a',
+ 'assets/screenshots/wazuh-threat-hunting.png': '834a1220727cbc7a256bfa95a7c424f8f6136d380202a8b867cdab053282c397'}
 SAFE_SPECIAL = {'.gitignore', '.editorconfig'}
 SAFE_SUFFIXES = {'.md', '.py', '.yaml', '.yml', '.xml', '.example'}
 SECRET_PATTERNS = {
@@ -39,8 +43,14 @@ def main():
         if path.is_symlink():
             failures.append((name, 'symlinks are not allowed in the publication set'))
             continue
+        if name in APPROVED_SCREENSHOTS:
+            image_bytes = path.read_bytes()
+            if (not image_bytes.startswith(b'\x89PNG\r\n\x1a\n')
+                    or hashlib.sha256(image_bytes).hexdigest() != APPROVED_SCREENSHOTS[name]):
+                failures.append((name, 'image differs from visually and OCR-reviewed original'))
+            continue
         if path.name not in SAFE_SPECIAL and path.suffix not in SAFE_SUFFIXES:
-            failures.append((name, 'file type outside the reviewed text-only publication set'))
+            failures.append((name, 'file type outside the reviewed publication set'))
             continue
         if path.stat().st_size > 250_000:
             failures.append((name, 'unexpectedly large file'))
@@ -62,7 +72,7 @@ def main():
                 failures.append((name, 'Python syntax error'))
         if path.suffix == '.md':
             # Validate local Markdown links; anchors and web links are not filesystem paths.
-            for target in re.findall(r'(?<!!)\[[^\]]+\]\(([^)]+)\)', source):
+            for target in re.findall(r'!?\[[^\]]+\]\(([^)]+)\)', source):
                 if '://' in target or target.startswith('#'):
                     continue
                 destination = (path.parent / target.split('#', 1)[0]).resolve()
@@ -74,7 +84,7 @@ def main():
         print(f'FAIL {name}: {reason}')
     if failures:
         return 1
-    print(f'PASS: {checked} tracked text files; publication boundaries, links and Python syntax checked.')
+    print(f'PASS: {checked} tracked files; publication boundaries, image checksums, links and Python syntax checked.')
     print('Manual review and a full-history secret scan remain required.')
     return 0
 

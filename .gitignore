@@ -80,3 +80,8 @@ node_modules/
 *~
 .DS_Store
 Thumbs.db
+
+# Explicitly reviewed original report screenshots; all other PNGs remain ignored
+!assets/screenshots/gitlab-security-pipeline.png
+!assets/screenshots/wazuh-security-overview.png
+!assets/screenshots/wazuh-threat-hunting.png

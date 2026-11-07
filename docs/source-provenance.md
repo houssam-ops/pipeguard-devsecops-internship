@@ -1,6 +1,6 @@
 # Source provenance
 
-PipeGuard is the public portfolio name chosen by the project owner. This repository was prepared from a private academic report and a separately supplied execution guide. Neither original document is distributed. The report was used as a private reference for the README; no report pages or screenshots were extracted into this repository.
+PipeGuard is the public portfolio name chosen by the project owner. This repository was prepared from a private academic report and a separately supplied execution guide. Neither original document is distributed. The report remains private. At the project owner's explicit request, three reviewed embedded screenshots are published without the surrounding report pages. See `screenshot-provenance.md` for their source figures and checksums.
 
 ## Recovered guide artifacts
 
