@@ -1,0 +1,31 @@
+# Recovered execution-guide excerpt; see docs/source-provenance.md.
+stages:
+  - security-scan
+  - build-and-sign
+  - gitops-sync
+
+variables:
+  REGISTRY_URL: "registry.example.invalid:5005"
+  IMAGE_NAME: "demo-app/juice-shop"
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+
+sast-semgrep:
+  stage: security-scan
+  image: returntocorp/semgrep
+  script:
+    - semgrep ci --config=auto --json --output=semgrep-results.json
+  artifacts:
+    paths: [semgrep-results.json]
+    expire_in: 1 week
+
+sca-trivy:
+  stage: security-scan
+  image: aquasec/trivy:latest
+  script:
+    - trivy fs --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --exit-code 1 .
+
+iac-checkov:
+  stage: security-scan
+  image: bridgecrew/checkov:latest
+  script:
+    - checkov -d k8s-manifests/ --framework kubernetes --soft-fail

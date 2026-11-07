@@ -1,0 +1,7 @@
+<!-- Recovered configuration excerpt; see docs/source-provenance.md. -->
+<!-- Dans ossec.conf du manager Wazuh -->
+<sca>
+  <enabled>yes</enabled>
+  <scan_on_start>yes</scan_on_start>
+  <interval>12h</interval>
+</sca>

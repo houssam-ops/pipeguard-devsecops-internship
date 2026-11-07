@@ -1,0 +1,159 @@
+# HISTORICAL PROTOTYPE: review only; do not run against a live cluster.
+# See docs/prototype-review.md and docs/source-provenance.md.
+import os
+from collections import defaultdict
+from datetime import datetime
+from flask import Flask, request, jsonify
+from kubernetes import client, config
+
+app = Flask(__name__)
+
+try:
+    config.load_kube_config()
+    k8s_network_api = client.NetworkingV1Api()
+    print("Connexion au cluster Kubernetes validée !")
+except Exception as e:
+    print(f"Erreur de connexion Kubernetes : {e}")
+
+# --- Poids de scoring (justifiés dans le rapport : § état de l'art, MITRE ATT&CK / CVSS-like) ---
+MITRE_WEIGHT = {
+    "TA0004": 30,  # Privilege Escalation
+    "TA0010": 25,  # Exfiltration
+    "TA0040": 20,  # Impact
+    "TA0002": 15,  # Execution
+    "TA0006": 10,  # Credential Access
+}
+SEVERITY_WEIGHT = {"CRITICAL": 25, "HIGH": 15, "WARNING": 8, "NOTICE": 3}
+DECAY_WINDOW_MIN = 30
+RISK_THRESHOLD_ISOLATE = 70
+RISK_THRESHOLD_ALERT_SOC = 40
+
+# --- État en mémoire ---
+incidents = defaultdict(list)   # (namespace, pod) -> liste d'alertes horodatées
+kpi_log = []                    # trace des timestamps pour MTTD/MTTR (voir metrics/)
+incident_status = {}            # obligatoire (Niveau 1) : cycle de vie des incidents — (namespace, pod) -> "NEW"|"INVESTIGATING"|"CONTAINED"|"CLOSED"
+
+
+def score_asset(namespace, pod):
+    now = datetime.utcnow()
+    score = 0
+    for alert in incidents[(namespace, pod)]:
+        age_min = (now - alert["ts"]).total_seconds() / 60
+        decay = max(0, 1 - age_min / DECAY_WINDOW_MIN)
+        score += (SEVERITY_WEIGHT.get(alert["severity"], 5)
+                  + MITRE_WEIGHT.get(alert["mitre_tactic"], 5)) * decay
+    return min(100, round(score))
+
+
+def enrich_with_cti(ip_address=None, file_hash=None):
+    """Obligatoire (Niveau 1) : enrichissement Threat Intelligence (stub à compléter avec de vraies clés API — activation requise)."""
+    # Exemple d'appel réel (à activer avec une clé API valide) :
+    # resp = requests.get(f"https://api.abuseipdb.com/api/v2/check?ipAddress={ip_address}",
+    #                      headers={"Key": os.environ["ABUSEIPDB_KEY"]})
+    # return resp.json()
+    return {"enriched": False, "note": "CTI à activer avec une clé API valide (obligatoire, Niveau 1)"}
+
+
+def correlate_and_score(namespace, pod, severity, mitre_tactic, rule):
+    t_alert = datetime.utcnow()
+    incidents[(namespace, pod)].append({
+        "ts": t_alert, "severity": severity, "mitre_tactic": mitre_tactic, "rule": rule
+    })
+    incident_status.setdefault((namespace, pod), "NEW")
+    risk = score_asset(namespace, pod)
+    kpi_log.append({"namespace": namespace, "pod": pod, "risk": risk,
+                     "t_alert": t_alert.isoformat(), "rule": rule})
+
+    if risk >= RISK_THRESHOLD_ISOLATE:
+        return "isolate", risk
+    elif risk >= RISK_THRESHOLD_ALERT_SOC:
+        return "alert_soc", risk
+    return "log_only", risk
+
+
+def generate_isolate_policy_manifest(pod_name):
+    return {
+        "apiVersion": "networking.k8s.io/v1",
+        "kind": "NetworkPolicy",
+        "metadata": {"name": f"isolate-{pod_name}", "namespace": "demo-app"},
+        "spec": {
+            "podSelector": {"matchLabels": {"app": "juice-shop"}},
+            "policyTypes": ["Ingress", "Egress"]
+        }
+    }
+
+
+@app.route('/falco-webhook', methods=['POST'])
+def receive_falco_alert():
+    alert_data = request.json
+    if not alert_data:
+        return jsonify({"status": "error"}), 400
+
+    rule = alert_data.get("rule", "")
+    output_fields = alert_data.get("output_fields", {})
+    pod_name = output_fields.get("k8s.pod.name")
+    namespace = output_fields.get("k8s.ns.name")
+    severity = alert_data.get("priority", "WARNING").upper()
+    mitre_tactic = alert_data.get("tags", {}).get("mitre_tactic", "TA0002")
+
+    if not (pod_name and namespace):
+        return jsonify({"status": "ignored"}), 200
+
+    action, risk = correlate_and_score(namespace, pod_name, severity, mitre_tactic, rule)
+    print(f"[ALERTE] Règle={rule} Pod={pod_name} Risque={risk}/100 Action={action}")
+
+    t_alert = datetime.utcnow()
+    if action == "isolate":
+        try:
+            policy_manifest = generate_isolate_policy_manifest(pod_name)
+            k8s_network_api.create_namespaced_network_policy(
+                namespace=namespace, body=policy_manifest
+            )
+            incident_status[(namespace, pod_name)] = "CONTAINED"
+            t_remediation = datetime.utcnow()
+            mttr_seconds = (t_remediation - t_alert).total_seconds()
+            print(f"[REMEDIATION] Pod {pod_name} isolé (risque={risk}, MTTR={mttr_seconds:.2f}s)")
+            return jsonify({"status": "action_taken", "risk": risk, "mttr_s": mttr_seconds}), 200
+        except Exception as e:
+            return jsonify({"status": "error", "details": str(e)}), 500
+
+    elif action == "alert_soc":
+        incident_status[(namespace, pod_name)] = "INVESTIGATING"
+        # Obligatoire (Niveau 1) : brancher ici notification Slack + création GitLab Issue
+        print(f"[SOC] Alerte remontée pour {pod_name} (risque={risk})")
+        return jsonify({"status": "alert_soc", "risk": risk}), 200
+
+    return jsonify({"status": "log_only", "risk": risk}), 200
+
+
+@app.route('/risk-scores', methods=['GET'])
+def get_risk_scores():
+    """Dashboard minimal : classement des assets par score de risque courant."""
+    scores = [
+        {"namespace": ns, "pod": pod, "risk": score_asset(ns, pod),
+         "status": incident_status.get((ns, pod), "NEW")}
+        for (ns, pod) in incidents.keys()
+    ]
+    return jsonify(sorted(scores, key=lambda x: -x["risk"]))
+
+
+@app.route('/unisolate', methods=['POST'])
+def unisolate_pod():
+    """Obligatoire (Niveau 1) : rémédiation inversée — l'analyste SOC dé-isole un pod après investigation."""
+    data = request.json or {}
+    namespace = data.get("namespace", "demo-app")
+    pod_name = data.get("pod_name")
+    if not pod_name:
+        return jsonify({"status": "error", "details": "pod_name requis"}), 400
+    try:
+        k8s_network_api.delete_namespaced_network_policy(
+            name=f"isolate-{pod_name}", namespace=namespace
+        )
+        incident_status[(namespace, pod_name)] = "CLOSED"
+        return jsonify({"status": "unisolated", "pod": pod_name}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "details": str(e)}), 500
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)

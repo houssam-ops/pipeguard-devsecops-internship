@@ -1,0 +1,12 @@
+# Recovered execution-guide excerpt; see docs/source-provenance.md.
+- rule: Shell spawned in demo-app container
+  desc: Détecte un shell lancé dans un conteneur applicatif
+  condition: >
+    spawned_process and container and
+    k8s.ns.name="demo-app" and
+    proc.name in (bash, sh, zsh)
+  output: >
+    Shell suspect détecté (user=%user.name container=%container.name
+    commande=%proc.cmdline)
+  priority: WARNING
+  tags: [container, shell, mitre_execution]

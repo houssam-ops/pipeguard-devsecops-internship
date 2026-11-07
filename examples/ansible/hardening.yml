@@ -1,0 +1,17 @@
+# Recovered execution-guide excerpt; see docs/source-provenance.md.
+- hosts: all
+  become: true
+  tasks:
+    - name: Désactiver le login root SSH
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin'
+        line: 'PermitRootLogin no'
+      notify: restart sshd
+    - name: Installer fail2ban
+      apt: { name: fail2ban, state: present }
+    - name: Mises à jour de sécurité automatiques
+      apt: { name: unattended-upgrades, state: present }
+  handlers:
+    - name: restart sshd
+      service: { name: sshd, state: restarted }
